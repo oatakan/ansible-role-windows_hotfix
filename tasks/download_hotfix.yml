@@ -1,0 +1,23 @@
+---
+
+- name: download hotfix
+  win_get_url:
+    url: '{{ hotfix.url }}'
+    dest: '{{ hotfix_download_location }}\{{ hotfix.file }}'
+  register: download_hotfix
+  until: download_hotfix is success
+  delay: 3
+  retries: 5
+  when: not use_raw_module
+
+- name: download hotfix
+  raw: |
+    {{ windows_ignore_cert_block if windows_ps_ignore_cert else '#' }} 
+    (New-Object -TypeName System.Net.WebClient).DownloadFile("{{ hotfix.url }}", "{{ hotfix_download_location }}\{{ hotfix_filename }}")
+  changed_when: False
+  check_mode: no
+  register: download_hotfix
+  until: download_hotfix is success
+  delay: 3
+  retries: 5
+  when: use_raw_module

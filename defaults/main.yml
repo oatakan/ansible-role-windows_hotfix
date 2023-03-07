@@ -1,0 +1,45 @@
+---
+
+hotfix: {}
+use_raw_module: false # set to true when powershell version < 3
+
+temp_directory: "{{ ansible_env.TEMP | default(default_temp_directory) }}"
+hotfix_download_location: "{{ ansible_env.TEMP }}"
+enable_winrm_command: "& $([scriptblock]::Create((New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1'))) -ForceNewSSLCert -EnableCredSSP"
+
+hotfix_install_wait_seconds: 300
+
+windows_ps_ignore_cert: false
+
+windows_ignore_cert_block: |
+  if (-not ([System.Management.Automation.PSTypeName]'ServerCertificateValidationCallback').Type)
+  {
+  $certCallback = @"
+      using System;
+      using System.Net;
+      using System.Net.Security;
+      using System.Security.Cryptography.X509Certificates;
+      public class ServerCertificateValidationCallback
+      {
+          public static void Ignore()
+          {
+              if(ServicePointManager.ServerCertificateValidationCallback ==null)
+              {
+                  ServicePointManager.ServerCertificateValidationCallback += 
+                      delegate
+                      (
+                          Object obj, 
+                          X509Certificate certificate, 
+                          X509Chain chain, 
+                          SslPolicyErrors errors
+                      )
+                      {
+                          return true;
+                      };
+              }
+          }
+      }
+  "@
+      Add-Type $certCallback
+   }
+  [ServerCertificateValidationCallback]::Ignore()

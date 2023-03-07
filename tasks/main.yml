@@ -1,0 +1,4 @@
+---
+
+- include_tasks: install_hotfix.yml
+  when: hotfix | length
