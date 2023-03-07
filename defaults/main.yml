@@ -3,8 +3,9 @@
 hotfix: {}
 use_raw_module: false # set to true when powershell version < 3
 
+default_temp_directory: 'C:\Windows\Temp'
 temp_directory: "{{ ansible_env.TEMP | default(default_temp_directory) }}"
-hotfix_download_location: "{{ ansible_env.TEMP }}"
+hotfix_download_location: "{{ ansible_env.TEMP | default(default_temp_directory) }}"
 enable_winrm_command: "& $([scriptblock]::Create((New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1'))) -ForceNewSSLCert -EnableCredSSP"
 
 hotfix_install_wait_seconds: 300
