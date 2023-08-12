@@ -22,7 +22,7 @@
     }
   changed_when: False
   check_mode: no
-  when: hotfix_filename | regex_search("^.*\.zip$", ignorecase=True)
+  when: hotfix_filename | regex_search("^.*\.zip$", ignorecase=True) or hotfix_filename | regex_search("^.*zip\.exe$", ignorecase=True)
 
 - name: delete scheduled task if it exists (hotfix)
   raw: 'SCHTASKS /Delete /TN hotfix_install /f'
