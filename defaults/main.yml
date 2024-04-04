@@ -12,6 +12,9 @@ hotfix_install_wait_seconds: 300
 
 windows_ps_ignore_cert: false
 
+windows_set_tls_block: |
+  [Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072);
+
 windows_ignore_cert_block: |
   if (-not ([System.Management.Automation.PSTypeName]'ServerCertificateValidationCallback').Type)
   {

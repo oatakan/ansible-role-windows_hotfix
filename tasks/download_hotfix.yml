@@ -12,7 +12,7 @@
 
 - name: download hotfix
   raw: |
-    {{ windows_ignore_cert_block if windows_ps_ignore_cert else '#' }} 
+    {{ windows_ignore_cert_block if windows_ps_ignore_cert else windows_set_tls_block }} 
     (New-Object -TypeName System.Net.WebClient).DownloadFile("{{ hotfix.url }}", "{{ hotfix_download_location }}\{{ hotfix_filename }}")
   changed_when: False
   check_mode: no
