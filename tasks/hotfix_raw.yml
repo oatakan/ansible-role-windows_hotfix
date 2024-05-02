@@ -4,6 +4,8 @@
   raw: |
     $tmp_dir = "{{ hotfix_download_location }}"
     $zip_file = "{{ hotfix_download_location }}\{{ hotfix_filename }}"
+    $7zip_exe = "{{ hotfix_download_location }}\7za.exe"
+    $7zip_download_url = "{{ seven_zip_download_url }}"
 
     try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem > $null
@@ -13,10 +15,20 @@
     }
 
     if ($legacy) {
-        $shell = New-Object -ComObject Shell.Application
-        $zip_src = $shell.NameSpace($zip_file)
-        $zip_dest = $shell.NameSpace($tmp_dir)
-        $zip_dest.CopyHere($zip_src.Items(), 1044)
+        try {
+            $shell = New-Object -ComObject Shell.Application
+            $zip_src = $shell.NameSpace($zip_file)
+            $zip_dest = $shell.NameSpace($tmp_dir)
+            $zip_dest.CopyHere($zip_src.Items(), 1044)
+        } catch {
+            if (Test-Path $7zip_exe) {
+                & $7zip_exe x $zip_file "-o$tmp_dir"
+            } else {
+                {{ windows_ignore_cert_block if windows_ps_ignore_cert else windows_set_tls_block }}
+                (New-Object -TypeName System.Net.WebClient).DownloadFile($7zip_download_url, $7zip_exe)
+                & $7zip_exe x $zip_file "-o$tmp_dir"
+            }
+        }
     } else {
         [System.IO.Compression.ZipFile]::ExtractToDirectory($zip_file, $tmp_dir)
     }

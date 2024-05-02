@@ -12,6 +12,8 @@ hotfix_install_wait_seconds: 300
 
 windows_ps_ignore_cert: false
 
+seven_zip_download_url: https://www.7-zip.org/a/7zr.exe # this should only be ever required for Windows 2008 R2 Core
+
 windows_set_tls_block: |
   [Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072);
 
