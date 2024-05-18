@@ -1,43 +1,51 @@
 ---
 
-- block:
-    - include_tasks: download_hotfix.yml
+- name: hotfix installation
+  block:
+    - name: download hotfix
+      ansible.builtin.include_tasks: download_hotfix.yml
 
-    - block:
-        - include_tasks: hotfix_ps4.yml
+    - name: hotfix install (powershell version 4)
+      block:
+        - name: hotfix install (powershell version 4)
+          ansible.builtin.include_tasks: hotfix_ps4.yml
       rescue:
-        - include_tasks: hotfix_ps3.yml
+        - name: hotfix install (powershell version 3)
+          ansible.builtin.include_tasks: hotfix_ps3.yml
       when:
         - not use_raw_module
         - ansible_powershell_version is version('4', '>=')
 
-    - include_tasks: hotfix_ps3.yml
+    - name: hotfix install (powershell version 3)
+      ansible.builtin.include_tasks: hotfix_ps3.yml
       when:
         - not use_raw_module
         - ansible_powershell_version is version('3', '==')
 
-    - include_tasks: hotfix_raw.yml
+    - name: hotfix install (using raw module)
+      ansible.builtin.include_tasks: hotfix_raw.yml
       when: use_raw_module or ansible_powershell_version is version('3', '<')
 
   always:
     - name: ensure hotfix file is removed
-      win_file:
+      ansible.windows.win_file:
         path: '{{ hotfix_download_location }}\{{ hotfix.file }}'
         state: absent
       when: not use_raw_module
 
-    - block:
+    - name: remove hotfix install files
+      block:
         - name: remove hotfix file
-          raw: 'Remove-Item -Path {{ hotfix_download_location }}\{{ hotfix.file }} -Force'
-          changed_when: False
-          check_mode: no
-          ignore_errors: yes
+          ansible.builtin.raw: 'Remove-Item -Path {{ hotfix_download_location }}\{{ hotfix.file }} -Force'
+          changed_when: false
+          check_mode: false
+          failed_when: false
 
         - name: remove hotfix zip file
-          raw: 'Remove-Item -Path {{ hotfix_download_location }}\{{ hotfix_filename }} -Force'
-          changed_when: False
-          check_mode: no
-          ignore_errors: yes
+          ansible.builtin.raw: 'Remove-Item -Path {{ hotfix_download_location }}\{{ hotfix_filename }} -Force'
+          changed_when: false
+          check_mode: false
+          failed_when: false
           when: hotfix.file != hotfix_filename
       when: use_raw_module or ansible_powershell_version is version('3', '<')
   vars:
@@ -45,7 +53,7 @@
     hotfix_temp_directory: "{{ hotfix_download_location }}"
 
 - name: re-enable winrm after reboot
-  win_scheduled_task:
+  community.windows.win_scheduled_task:
     name: enable_winrm
     description: Enable winrm
     actions:
@@ -64,11 +72,11 @@
   when: hotfix.enable_winrm | default(False)
 
 - name: reboot if needed
-  win_reboot:
+  ansible.windows.win_reboot:
   when: (hotfix.enable_winrm | default(False)) or (hotfix.reboot | default(hotfix_install.reboot_required) | default(True))
 
 - name: remove re-enable scheduled task
-  win_scheduled_task:
+  community.windows.win_scheduled_task:
     name: enable_winrm
     state: absent
   when: hotfix.enable_winrm | default(False)

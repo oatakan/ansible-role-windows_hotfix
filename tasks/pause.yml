@@ -1,0 +1,5 @@
+---
+
+- name: pausing for system to reboot after hotfix
+  ansible.builtin.pause:
+    seconds: "{{ hotfix_install_wait_seconds | default(60) }}"

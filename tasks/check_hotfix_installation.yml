@@ -1,0 +1,160 @@
+---
+
+- name: monitor hotfix installation status continuously
+  block:
+    - name: ensure hotfix installation process is finished
+      ansible.builtin.raw: |
+        $processes = @('wusa', '{{ hotfix.file }}')
+        $runningProcesses = Get-Process | Where-Object { $processes -contains $_.ProcessName }
+
+        if ($runningProcesses) {
+            return $true
+        } else {
+            return $false
+        }
+      register: hotfix_install_process
+      until:
+        - hotfix_install_process.stdout is defined
+        - not (hotfix_install_process.stdout | regex_replace('[^\x20-\x7E]+', '') | trim | bool)
+      retries: "{{ (_remaining_time | float / 30) | round(0, 'ceil') | int }}"
+      delay: 30
+      ignore_unreachable: true
+      failed_when: false
+      changed_when: false
+
+    - name: check for hotfix installation
+      ansible.builtin.raw: |
+        get-hotfix -id {{ hotfix.kb }}
+      register: hotfix_check
+      until: hotfix_check.rc == 0
+      retries: "{{ (_remaining_time | float / 30) | round(0, 'ceil') | int }}"
+      delay: 30
+      ignore_unreachable: true
+      failed_when: false
+      changed_when: false
+
+    - name: fail if unreachable
+      ansible.builtin.fail:
+        msg: "system is unresponsive (potentially rebooting). will retry.."
+      when:
+        - hotfix_check.unreachable is defined
+        - hotfix_check.unreachable
+
+    - name: check if a reboot is pending
+      ansible.builtin.raw: |
+        function Check-PendingReboot {
+            $rebootPending = $false
+            try {
+                if (Test-Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") {
+                    $rebootPending = $true
+                }
+            } catch {
+                Write-Host "Error checking Component Based Servicing reboot flag."
+            }
+            try {
+                if (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") {
+                    $rebootPending = $true
+                }
+            } catch {
+                Write-Host "Error checking Windows Update reboot flag."
+            }
+            try {
+                $smPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
+                $properties = Get-ItemProperty -Path $smPath -Name "PendingFileRenameOperations" -ErrorAction SilentlyContinue
+                if ($properties -and $properties.PendingFileRenameOperations) {
+                    $rebootPending = $true
+                }
+            } catch {
+                Write-Host "Error checking Pending File Rename operations."
+            }
+            return $rebootPending
+        }
+        return Check-PendingReboot
+      register: reboot_check
+      failed_when: false
+      changed_when: false
+
+    - name: evaluate reboot necessity
+      ansible.builtin.debug:
+        msg: "reboot is required to complete the update process."
+      when: (reboot_check.stdout | regex_replace('[^\x20-\x7E]+', '') | trim | bool) | default(false)
+
+    - name: wait for reboot
+      block:
+        - name: wait for reboot to start
+          ansible.builtin.wait_for:
+            host: "{{ target_ansible_host }}"
+            port: "{{ target_ansible_port }}"
+            state: stopped
+            timeout: '{{ _remaining_time }}'
+          register: wait_for_system
+          delegate_to: localhost
+          delegate_facts: true
+          become: false
+          failed_when: false
+          vars:
+            ansible_connection: local
+
+        - name: wait for system to come back online
+          ansible.builtin.wait_for:
+            host: "{{ target_ansible_host }}"
+            port: "{{ target_ansible_port }}"
+            state: started
+            timeout: '{{ _remaining_time }}'
+          register: wait_for_system
+          delegate_to: localhost
+          delegate_facts: true
+          become: false
+          failed_when: false
+          vars:
+            ansible_connection: local
+
+        - name: check if the system is reachable
+          ansible.builtin.raw: hostname
+          changed_when: false
+      when: (reboot_check.stdout | regex_replace('[^\x20-\x7E]+', '') | trim | bool) | default(false)
+
+  rescue:
+    - name: wait before retrying due to potential reboot
+      ansible.builtin.wait_for:
+        host: "{{ target_ansible_host }}"
+        port: "{{ target_ansible_port }}"
+        state: started
+        timeout: '{{ _remaining_time }}'
+      register: wait_for_system
+      delegate_to: localhost
+      delegate_facts: true
+      become: false
+      failed_when: false
+      vars:
+        ansible_connection: local
+
+    - name: calculate elapsed time
+      ansible.builtin.command: date +%s
+      register: current_time
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_connection: local
+
+    - name: set elapsed time and remaining time values
+      ansible.builtin.set_fact:
+        _elapsed_time: "{{ (current_time.stdout | int) - (start_time.stdout | int) }}"
+        _remaining_time: "{{ [0, ((hotfix_install_wait_seconds | int) - (_elapsed_time | int))] | max }}"
+
+    - name: show remaining time
+      ansible.builtin.debug:
+        msg: "remaining time: {{ _remaining_time }}"
+
+    - name: retry monitoring hotfix installation
+      ansible.builtin.include_tasks: check_hotfix_installation.yml
+      when: _remaining_time | int > 0
+
+    - name: check for hotfix installation (final)
+      ansible.builtin.raw: |
+        get-hotfix -id {{ hotfix.kb }}
+      register: hotfix_check
+      ignore_unreachable: true
+      failed_when: false
+      changed_when: false

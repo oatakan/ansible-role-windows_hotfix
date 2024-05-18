@@ -1,7 +1,7 @@
 ---
 
 - name: download hotfix
-  win_get_url:
+  ansible.windows.win_get_url:
     url: '{{ hotfix.url }}'
     dest: '{{ hotfix_download_location }}\{{ hotfix.file }}'
   register: download_hotfix
@@ -11,11 +11,11 @@
   when: not use_raw_module
 
 - name: download hotfix
-  raw: |
-    {{ windows_ignore_cert_block if windows_ps_ignore_cert else windows_set_tls_block }} 
+  ansible.builtin.raw: |
+    {{ windows_ignore_cert_block if windows_ps_ignore_cert else windows_set_tls_block }}
     (New-Object -TypeName System.Net.WebClient).DownloadFile("{{ hotfix.url }}", "{{ hotfix_download_location }}\{{ hotfix_filename }}")
-  changed_when: False
-  check_mode: no
+  changed_when: false
+  check_mode: false
   register: download_hotfix
   until: download_hotfix is success
   delay: 3

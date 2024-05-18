@@ -1,7 +1,7 @@
 ---
 
 - name: unzip if needed
-  raw: |
+  ansible.builtin.raw: |
     $tmp_dir = "{{ hotfix_download_location }}"
     $zip_file = "{{ hotfix_download_location }}\{{ hotfix_filename }}"
     $7zip_exe = "{{ hotfix_download_location }}\7za.exe"
@@ -32,40 +32,39 @@
     } else {
         [System.IO.Compression.ZipFile]::ExtractToDirectory($zip_file, $tmp_dir)
     }
-  changed_when: False
-  check_mode: no
+  changed_when: false
+  check_mode: false
   when: hotfix_filename | regex_search("^.*\.zip$", ignorecase=True) or hotfix_filename | regex_search("^.*zip\.exe$", ignorecase=True)
 
 - name: delete scheduled task if it exists (hotfix)
-  raw: 'SCHTASKS /Delete /TN hotfix_install /f'
+  ansible.builtin.raw: 'SCHTASKS /Delete /TN hotfix_install /f'
   args:
     executable: cmd.exe
-  changed_when: False
-  check_mode: no
-  ignore_errors: yes
+  changed_when: false
+  check_mode: false
+  failed_when: false
 
 - name: create a scheduled task to install hotfix
-  raw: SCHTASKS /Create /SC MONTHLY /MO first /D SUN /TN hotfix_install /TR "{{ hotfix_download_location }}\{{ hotfix.file }} /quiet /restart"
+  ansible.builtin.raw: SCHTASKS /Create /SC MONTHLY /MO first /D SUN /TN hotfix_install /TR "{{ hotfix_download_location }}\{{ hotfix.file }} /quiet /restart"
   args:
     executable: cmd.exe
-  changed_when: False
-  check_mode: no
+  changed_when: false
+  check_mode: false
 
 - name: run scheduled task (hotfix)
-  raw: 'SCHTASKS /Run /TN hotfix_install'
+  ansible.builtin.raw: 'SCHTASKS /Run /TN hotfix_install'
   args:
     executable: cmd.exe
-  changed_when: False
-  check_mode: no
+  changed_when: false
+  check_mode: false
 
-- name: pausing for system to reboot after hotfix
-  pause:
-    seconds: "{{ hotfix_install_wait_seconds | default(60) }}"
+- name: wait for hotfix installation to finish
+  ansible.builtin.include_tasks: '{{ hotfix_wait_type | default("retry") }}.yml'
 
 - name: delete scheduled task (hotfix)
-  raw: 'SCHTASKS /Delete /TN hotfix_install /f'
+  ansible.builtin.raw: 'SCHTASKS /Delete /TN hotfix_install /f'
   args:
     executable: cmd.exe
-  changed_when: False
-  check_mode: no
-  ignore_errors: yes
+  changed_when: false
+  check_mode: false
+  failed_when: false

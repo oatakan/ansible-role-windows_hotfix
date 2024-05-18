@@ -1,3 +1,5 @@
 ---
 
 hotfix_filename: "{{ (hotfix.url).split('/')[-1] }}"
+
+hotfix_wait_type: "{{ 'retry' if (hotfix.kb is defined) else 'pause' }}"

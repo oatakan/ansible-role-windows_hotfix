@@ -1,0 +1,28 @@
+---
+
+- name: record start time
+  ansible.builtin.command: date +%s
+  register: start_time
+  delegate_to: localhost
+  changed_when: false
+  become: false
+  vars:
+    ansible_connection: local
+
+- name: set elapsed time and remaining time values
+  ansible.builtin.set_fact:
+    _elapsed_time: 0
+    _remaining_time: "{{ hotfix_install_wait_seconds | int }}"
+
+- name: set target_ansible_host
+  ansible.builtin.set_fact:
+    target_ansible_host: '{{ ansible_host }}'
+    target_ansible_port: '{{ ansible_port }}'
+
+- name: check for hotfix
+  ansible.builtin.include_tasks: check_hotfix_installation.yml
+
+- name: show hotfix installation status
+  ansible.builtin.debug:
+    msg: "hotfix ({{ hotfix.kb }}) is {{ '' if (hotfix_check.rc == 0) else 'not ' }}installed"
+  when: hotfix_check.rc is defined
