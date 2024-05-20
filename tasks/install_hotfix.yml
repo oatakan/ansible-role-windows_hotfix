@@ -63,20 +63,18 @@
       - type: boot
         delay: PT30S
         enabled: true
-        user_id: SYSTEM
+        # user_id: SYSTEM
     logon_type: service_account
     username: SYSTEM
     run_level: highest
     state: present
     enabled: true
-  when: hotfix.enable_winrm | default(False)
+  when: hotfix.enable_winrm | default(false)
 
 - name: reboot if needed
   ansible.windows.win_reboot:
-  when: (hotfix.enable_winrm | default(False)) or (hotfix.reboot | default(hotfix_install.reboot_required) | default(True))
+  when: (hotfix.enable_winrm | default(false)) or (hotfix.reboot | default(hotfix_install.reboot_required) | default(true))
 
-- name: remove re-enable scheduled task
-  community.windows.win_scheduled_task:
-    name: enable_winrm
-    state: absent
-  when: hotfix.enable_winrm | default(False)
+- name: check enable_winrm task
+  ansible.builtin.include_tasks: check_enable_winrm_task.yml
+  when: hotfix.enable_winrm | default(false)

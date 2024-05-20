@@ -1,0 +1,43 @@
+---
+
+- name: wait for scheduled task to complete
+  block:
+    - name: check scheduled task status
+      community.windows.win_scheduled_task_stat:
+        name: enable_winrm
+      register: task_status
+      until: task_status.task_exists and task_status.state.status == 'TASK_STATE_READY'
+      retries: 30
+      delay: 10
+      ignore_unreachable: true
+
+    - name: fail if unreachable
+      ansible.builtin.fail:
+        msg: "system is unresponsive. will retry.."
+      when:
+        - task_status.unreachable is defined
+        - task_status.unreachable
+
+  rescue:
+    - name: wait for system to recover from WinRM interruption
+      ansible.builtin.wait_for_connection:
+        delay: 10
+        timeout: 600
+
+    - name: check scheduled task status after recovery
+      community.windows.win_scheduled_task_stat:
+        name: enable_winrm
+      register: task_status
+      until: task_status.task_exists and task_status.state.status == 'TASK_STATE_READY'
+      retries: 30
+      delay: 10
+
+    - name: show task status after recovery
+      ansible.builtin.debug:
+        msg: "task status after recovery: {{ task_status.state.status }}"
+
+  always:
+    - name: delete the scheduled task after recovery
+      community.windows.win_scheduled_task:
+        name: enable_winrm
+        state: absent
