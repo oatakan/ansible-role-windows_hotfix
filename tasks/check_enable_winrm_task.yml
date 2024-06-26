@@ -41,3 +41,8 @@
       community.windows.win_scheduled_task:
         name: enable_winrm
         state: absent
+
+    - name: wait for system to recover
+      ansible.builtin.wait_for_connection:
+        delay: 20
+        timeout: 60
