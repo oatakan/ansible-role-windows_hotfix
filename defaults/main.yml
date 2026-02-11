@@ -23,6 +23,11 @@ windows_set_tls_block: |
   [Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072);
 
 windows_ignore_cert_block: |
+  $authRootPath = "HKLM:\SOFTWARE\Policies\Microsoft\SystemCertificates\AuthRoot"
+  if (-not (Test-Path $authRootPath)) {
+      New-Item -Path $authRootPath -Force | Out-Null
+  }
+  Set-ItemProperty -Path $authRootPath -Name "DisableRootAutoUpdate" -Value 1 -Type DWORD -Force
   if (-not ([System.Management.Automation.PSTypeName]'ServerCertificateValidationCallback').Type)
   {
   $certCallback = @"
