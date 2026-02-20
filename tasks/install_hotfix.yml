@@ -72,7 +72,7 @@
   when: hotfix.enable_winrm | default(false)
 
 - name: reboot if needed
-  ansible.windows.win_reboot:
+  ansible.builtin.include_tasks: reboot.yml
   when: (hotfix.enable_winrm | default(false)) or (hotfix.reboot | default(hotfix_install.reboot_required) | default(true))
 
 - name: check enable_winrm task

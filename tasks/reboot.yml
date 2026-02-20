@@ -1,0 +1,46 @@
+---
+- name: reboot if needed
+  block:
+    - name: reboot if needed (win_reboot)
+      ansible.windows.win_reboot:
+  rescue:
+    - name: fallback reboot for known win_reboot datetime bug
+      ansible.builtin.raw: shutdown /r /t 5 /f
+      args:
+        executable: cmd.exe
+      changed_when: true
+      check_mode: false
+      when:
+        - ansible_failed_result is defined
+        - ansible_failed_result.msg is defined
+        - "'offset-naive and offset-aware datetimes' in ansible_failed_result.msg"
+
+    - name: wait for reboot to start (fallback)
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: "{{ ansible_port | default(5986) }}"
+        state: drained
+        timeout: 180
+      delegate_to: localhost
+      when:
+        - ansible_failed_result is defined
+        - ansible_failed_result.msg is defined
+        - "'offset-naive and offset-aware datetimes' in ansible_failed_result.msg"
+
+    - name: wait for system to come back online (fallback)
+      ansible.builtin.wait_for_connection:
+        delay: 20
+        sleep: 10
+        timeout: 600
+      when:
+        - ansible_failed_result is defined
+        - ansible_failed_result.msg is defined
+        - "'offset-naive and offset-aware datetimes' in ansible_failed_result.msg"
+
+    - name: re-raise unknown reboot errors
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('win_reboot failed') }}"
+      when:
+        - ansible_failed_result is not defined or
+          ansible_failed_result.msg is not defined or
+          ('offset-naive and offset-aware datetimes' not in ansible_failed_result.msg)
