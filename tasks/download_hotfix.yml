@@ -15,7 +15,12 @@
     - name: download hotfix (webclient)
       ansible.builtin.raw: |
         {{ windows_ignore_cert_block if windows_ps_ignore_cert else windows_set_tls_block }}
-        (New-Object -TypeName System.Net.WebClient).DownloadFile("{{ hotfix.url }}", "{{ hotfix_download_location }}\{{ hotfix_filename }}")
+        try {
+            (New-Object -TypeName System.Net.WebClient).DownloadFile("{{ hotfix.url }}", "{{ hotfix_download_location }}\{{ hotfix_filename }}")
+            if (-not (Test-Path "{{ hotfix_download_location }}\{{ hotfix_filename }}")) { exit 1 }
+        } catch {
+            exit 1
+        }
       changed_when: false
       check_mode: false
       register: download_hotfix

@@ -4,7 +4,7 @@
   block:
     - name: ensure hotfix installation process is finished
       ansible.builtin.raw: |
-        $processes = @('wusa', '{{ hotfix.file }}')
+        $processes = @('wusa', [System.IO.Path]::GetFileNameWithoutExtension('{{ hotfix.file }}'))
         $runningProcesses = Get-Process | Where-Object { $processes -contains $_.ProcessName }
 
         if ($runningProcesses) {
@@ -24,13 +24,12 @@
 
     - name: check for hotfix installation
       ansible.builtin.raw: |
-        get-hotfix -id {{ hotfix.kb }}
+        get-hotfix -id {{ hotfix.kb }} -ErrorAction Stop | Out-Null
       register: hotfix_check
       until: hotfix_check.rc == 0
       retries: "{{ (_remaining_time | float / 30) | round(0, 'ceil') | int }}"
       delay: 30
       ignore_unreachable: true
-      failed_when: false
       changed_when: false
 
     - name: fail if unreachable
@@ -86,14 +85,21 @@
             host: "{{ target_ansible_host }}"
             port: "{{ target_ansible_port }}"
             state: stopped
-            timeout: '{{ _remaining_time }}'
-          register: wait_for_system
+            timeout: "{{ [(_remaining_time | int), 180] | min }}"
+          register: wait_for_reboot_start
           delegate_to: localhost
           delegate_facts: true
           become: false
           failed_when: false
           vars:
             ansible_connection: local
+
+        - name: continue when reboot did not start during detection window
+          ansible.builtin.debug:
+            msg: "reboot pending flag is set, but reboot did not start within detection window; continuing"
+          when:
+            - wait_for_reboot_start is defined
+            - wait_for_reboot_start.failed | default(false)
 
         - name: wait for system to come back online
           ansible.builtin.wait_for:
@@ -108,6 +114,9 @@
           failed_when: false
           vars:
             ansible_connection: local
+          when:
+            - wait_for_reboot_start is defined
+            - not (wait_for_reboot_start.failed | default(false))
 
         - name: check if the system is reachable
           ansible.builtin.raw: hostname
@@ -153,7 +162,7 @@
 
     - name: check for hotfix installation (final)
       ansible.builtin.raw: |
-        get-hotfix -id {{ hotfix.kb }}
+        get-hotfix -id {{ hotfix.kb }} -ErrorAction Stop | Out-Null
       register: hotfix_check
       ignore_unreachable: true
       failed_when: false

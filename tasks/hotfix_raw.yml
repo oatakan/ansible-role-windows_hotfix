@@ -36,6 +36,17 @@
   check_mode: false
   when: hotfix_filename | regex_search("^.*\.zip$", ignorecase=True) or hotfix_filename | regex_search("^.*zip\.exe$", ignorecase=True)
 
+- name: rename downloaded file to expected filename if not a zip
+  ansible.builtin.raw: |
+    $src = "{{ hotfix_download_location }}\{{ hotfix_filename }}"
+    $dst = "{{ hotfix_download_location }}\{{ hotfix.file }}"
+    if ((Test-Path $src) -and ($src -ne $dst)) {
+        Rename-Item -Path $src -NewName $dst -Force
+    }
+  changed_when: false
+  check_mode: false
+  when: not (hotfix_filename | regex_search("^.*\.zip$", ignorecase=True)) and not (hotfix_filename | regex_search("^.*zip\.exe$", ignorecase=True))
+
 - name: delete scheduled task if it exists (hotfix)
   ansible.builtin.raw: 'SCHTASKS /Delete /TN hotfix_install /f'
   args:
@@ -44,12 +55,25 @@
   check_mode: false
   failed_when: false
 
-- name: create a scheduled task to install hotfix
-  ansible.builtin.raw: SCHTASKS /Create /SC MONTHLY /MO first /D SUN /TN hotfix_install /TR "{{ hotfix_download_location }}\{{ hotfix.file }} /quiet /restart"
+- name: create a scheduled task to install hotfix (msu)
+  ansible.builtin.raw: >
+    SCHTASKS /Create /SC MONTHLY /MO first /D SUN /TN hotfix_install
+    /TR "wusa.exe {{ hotfix_download_location }}\{{ hotfix.file }} /quiet /norestart"
   args:
     executable: cmd.exe
   changed_when: false
   check_mode: false
+  when: hotfix.file | regex_search("\.msu$", ignorecase=True)
+
+- name: create a scheduled task to install hotfix (exe)
+  ansible.builtin.raw: >
+    SCHTASKS /Create /SC MONTHLY /MO first /D SUN /TN hotfix_install
+    /TR "{{ hotfix_download_location }}\{{ hotfix.file }} /quiet /norestart"
+  args:
+    executable: cmd.exe
+  changed_when: false
+  check_mode: false
+  when: not (hotfix.file | regex_search("\.msu$", ignorecase=True))
 
 - name: run scheduled task (hotfix)
   ansible.builtin.raw: 'SCHTASKS /Run /TN hotfix_install'
@@ -57,6 +81,31 @@
     executable: cmd.exe
   changed_when: false
   check_mode: false
+
+- name: wait for scheduled task to launch wusa (msu)
+  ansible.builtin.raw: |
+    $running = Get-Process | Where-Object { $_.ProcessName -eq 'wusa' }
+    if ($running) { exit 0 } else { exit 1 }
+  register: wusa_launch_check
+  until: wusa_launch_check.rc == 0
+  retries: 12
+  delay: 10
+  changed_when: false
+  ignore_unreachable: true
+  when: hotfix.file | regex_search("\.msu$", ignorecase=True)
+
+- name: wait for scheduled task to launch installer (exe)
+  ansible.builtin.raw: |
+    $processName = [System.IO.Path]::GetFileNameWithoutExtension('{{ hotfix.file }}')
+    $running = Get-Process | Where-Object { $_.ProcessName -eq $processName }
+    if ($running) { exit 0 } else { exit 1 }
+  register: exe_launch_check
+  until: exe_launch_check.rc == 0
+  retries: 12
+  delay: 10
+  changed_when: false
+  ignore_unreachable: true
+  when: not (hotfix.file | regex_search("\.msu$", ignorecase=True))
 
 - name: wait for hotfix installation to finish
   ansible.builtin.include_tasks: '{{ hotfix_wait_type | default("retry") }}.yml'

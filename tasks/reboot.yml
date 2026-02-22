@@ -1,4 +1,45 @@
 ---
+- name: reboot if needed (raw)
+  block:
+    - name: reboot system (raw)
+      ansible.builtin.raw: shutdown /r /t 5 /f
+      args:
+        executable: cmd.exe
+      changed_when: true
+      check_mode: false
+
+    - name: wait for reboot to start (raw)
+      ansible.builtin.wait_for:
+        host: "{{ target_ansible_host | default(ansible_host | default(inventory_hostname)) }}"
+        port: "{{ target_ansible_port | default(ansible_port | default(5986)) }}"
+        state: drained
+        delay: 5
+        timeout: 180
+      delegate_to: localhost
+
+    - name: wait for system to come back online (raw)
+      ansible.builtin.wait_for:
+        host: "{{ target_ansible_host | default(ansible_host | default(inventory_hostname)) }}"
+        port: "{{ target_ansible_port | default(ansible_port | default(5986)) }}"
+        state: started
+        delay: 30
+        timeout: 600
+      delegate_to: localhost
+
+    - name: confirm winrm is ready after raw reboot
+      ansible.builtin.raw: hostname
+      register: raw_reboot_ready_check
+      until:
+        - raw_reboot_ready_check.unreachable is not defined or not raw_reboot_ready_check.unreachable
+        - raw_reboot_ready_check.rc is defined
+        - raw_reboot_ready_check.rc == 0
+      retries: 18
+      delay: 10
+      ignore_unreachable: true
+      changed_when: false
+      failed_when: false
+  when: use_raw_module | default(false) or ansible_powershell_version is version('3', '<')
+
 - name: reboot if needed
   block:
     - name: reboot if needed (win_reboot)
@@ -13,29 +54,37 @@
       when:
         - ansible_failed_result is defined
         - ansible_failed_result.msg is defined
-        - "'offset-naive and offset-aware datetimes' in ansible_failed_result.msg"
+        - >
+          'offset-naive and offset-aware datetimes' in ansible_failed_result.msg or
+          'failed to get host boot time info' in ansible_failed_result.msg
 
     - name: wait for reboot to start (fallback)
       ansible.builtin.wait_for:
-        host: "{{ ansible_host | default(inventory_hostname) }}"
-        port: "{{ ansible_port | default(5986) }}"
+        host: "{{ target_ansible_host | default(ansible_host | default(inventory_hostname)) }}"
+        port: "{{ target_ansible_port | default(ansible_port | default(5986)) }}"
         state: drained
         timeout: 180
       delegate_to: localhost
       when:
         - ansible_failed_result is defined
         - ansible_failed_result.msg is defined
-        - "'offset-naive and offset-aware datetimes' in ansible_failed_result.msg"
+        - >
+          'offset-naive and offset-aware datetimes' in ansible_failed_result.msg or
+          'failed to get host boot time info' in ansible_failed_result.msg
 
     - name: wait for system to come back online (fallback)
-      ansible.builtin.wait_for_connection:
-        delay: 20
-        sleep: 10
+      ansible.builtin.wait_for:
+        host: "{{ target_ansible_host | default(ansible_host | default(inventory_hostname)) }}"
+        port: "{{ target_ansible_port | default(ansible_port | default(5986)) }}"
+        state: started
         timeout: 600
+      delegate_to: localhost
       when:
         - ansible_failed_result is defined
         - ansible_failed_result.msg is defined
-        - "'offset-naive and offset-aware datetimes' in ansible_failed_result.msg"
+        - >
+          'offset-naive and offset-aware datetimes' in ansible_failed_result.msg or
+          'failed to get host boot time info' in ansible_failed_result.msg
 
     - name: re-raise unknown reboot errors
       ansible.builtin.fail:
@@ -43,4 +92,6 @@
       when:
         - ansible_failed_result is not defined or
           ansible_failed_result.msg is not defined or
-          ('offset-naive and offset-aware datetimes' not in ansible_failed_result.msg)
+          not ('offset-naive and offset-aware datetimes' in ansible_failed_result.msg or 'failed to get host boot time info' in ansible_failed_result.msg)
+
+  when: not (use_raw_module | default(false) or ansible_powershell_version is version('3', '<'))

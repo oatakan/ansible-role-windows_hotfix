@@ -26,3 +26,11 @@
   ansible.builtin.debug:
     msg: "hotfix ({{ hotfix.kb }}) is {{ '' if (hotfix_check.rc == 0) else 'not ' }}installed"
   when: hotfix_check.rc is defined
+
+- name: fail if hotfix not installed
+  ansible.builtin.fail:
+    msg: "hotfix {{ hotfix.kb }} could not be verified as installed after all retries"
+  when:
+    - hotfix_fail_if_not_installed | default(false) | bool
+    - hotfix_check.rc is defined
+    - hotfix_check.rc != 0

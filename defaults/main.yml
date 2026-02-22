@@ -15,6 +15,8 @@ hotfix_install_wait_seconds: 300
 
 hotfix_wait_type: retry # pause or retry
 
+hotfix_fail_if_not_installed: false # set to true to fail the role when KB is not found after all retries
+
 windows_ps_ignore_cert: false
 
 seven_zip_download_url: https://www.7-zip.org/a/7zr.exe # this should only be ever required for Windows 2008 R2 Core
